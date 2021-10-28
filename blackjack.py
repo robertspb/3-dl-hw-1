@@ -126,3 +126,56 @@ class BlackjackEnv(gym.Env):
         self.dealer = draw_hand(self.np_random)
         self.player = draw_hand(self.np_random)
         return self._get_obs()
+
+
+class BlackjackDoubleEnv(BlackjackEnv):
+    def __init__(self, natural=False, sab=False):
+        self.action_space = spaces.Discrete(3)
+        self.observation_space = spaces.Tuple((spaces.Discrete(32), spaces.Discrete(11), spaces.Discrete(2)))
+        self.seed()
+        self.natural = natural
+        self.sab = sab
+
+    def step(self, action):
+        assert self.action_space.contains(action)
+        if action == 1:  # hit: add a card to players hand and return
+            self.player.append(draw_card(self.np_random))
+            if is_bust(self.player):
+                done = True
+                reward = -1.
+            else:
+                done = False
+                reward = 0.0
+        elif action == 2:  # double
+            done = True
+            self.player.append(draw_card(self.np_random))
+            if is_bust(self.player):
+                reward = -2.
+            else:
+                while sum_hand(self.dealer) < 17:
+                    self.dealer.append(draw_card(self.np_random))
+                reward = 2.0 * cmp(score(self.player), score(self.dealer))
+            if (
+                not self.sab
+                and self.natural
+                and is_natural(self.player)
+                and reward == 2.0
+            ):
+                reward = 3.0
+        else:  # stick: play out the dealers hand, and score
+            done = True
+            while sum_hand(self.dealer) < 17:
+                self.dealer.append(draw_card(self.np_random))
+            reward = cmp(score(self.player), score(self.dealer))
+            if self.sab and is_natural(self.player) and not is_natural(self.dealer):
+                # Player automatically wins. Rules consistent with S&B
+                reward = 1.0
+            elif (
+                not self.sab
+                and self.natural
+                and is_natural(self.player)
+                and reward == 1.0
+            ):
+                # Natural gives extra points, but doesn't autowin. Legacy implementation
+                reward = 1.5
+        return self._get_obs(), reward, done, {}

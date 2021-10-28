@@ -3,7 +3,7 @@ import gym
 
 import blackjack
 
-class Q_learning:
+class QLearning:
   def __init__(self):
     self.max_pl_hand = 32 # max sum of player hand
     self.max_dl_hand = 11 # max value of visiable card of dealer
@@ -18,8 +18,7 @@ class Q_learning:
   def get_policy(self):
     return self.Q.argmax(1)
   
-  def run_episode(self, a, e, g):
-    a = 0
+  def run_episode(self, al, e, g):
     obs = self.game.reset()
     s = self._obs_to_idx(obs)
     pi = self.get_policy()
@@ -39,28 +38,28 @@ class Q_learning:
         else:
             a_new = np.random.randint(self.a_num)
         
-        self.Q[s, a] = self.Q[s, a] + a * (reward + g * np.max(self.Q[s_new]) - self.Q[s, a])
+        self.Q[s, a] = self.Q[s, a] + al * (reward + g * np.max(self.Q[s_new]) - self.Q[s, a])
         s = s_new
         a = a_new
               
-  def train(self, a, e, g, n):
+  def train(self, al, e, g, n):
     self.init_q()
     pi = self.get_policy()
 
     for _ in range(n):
-        self.run_episode(a, e, g)
+        self.run_episode(al, e, g)
         pi = self.get_policy()
 
     self.pi = pi
 
-  def train_with_means(self, a, e, g, n, k, d):
+  def train_with_means(self, al, e, g, n, k, d):
     self.init_q()
     pi = self.get_policy()
     mean_rewards = []
 
     j = 0
     for i in range(n):
-        self.run_episode(a, e, g)
+        self.run_episode(al, e, g)
         pi = self.get_policy()
         if i - j + 1 == k:
           self.pi = pi
@@ -93,3 +92,12 @@ class Q_learning:
 
   def _obs_to_idx(self, obs):
     return (obs[0] - 1) * self.max_dl_hand * 2 + (obs[1] - 1) * 2 + obs[2]
+
+
+class QLearningForDouble(QLearning):
+  def __init__(self):
+    self.max_pl_hand = 32
+    self.max_dl_hand = 11
+    self.a_num = 3
+    self.s_num = self.max_pl_hand * self.max_dl_hand * 2
+    self.game = blackjack.BlackjackDoubleEnv(natural=True)
