@@ -101,3 +101,60 @@ class QLearningForDouble(QLearning):
     self.a_num = 3
     self.s_num = self.max_pl_hand * self.max_dl_hand * 2
     self.game = blackjack.BlackjackDoubleEnv(natural=True)
+
+
+class QLearningCount(QLearning):
+  def __init__(self):
+    self.max_pl_hand = 32
+    self.max_dl_hand = 11
+    self.deck_st = 21
+    self.a_num = 3
+    self.s_num = self.max_pl_hand * self.max_dl_hand * 2 * self.deck_st
+    self.game = blackjack.BlackjackCountEnv(natural=True)
+    self.game.start_game()
+
+  def run_experiment(self, n):
+    pi = self.pi
+    rewards = []
+
+    for _ in range(n):
+        reward = 0
+        stop = False
+        obs = self.game.start_game()
+        s = self._obs_to_idx(obs)
+        
+        while not stop:
+            a = pi[s]
+            obs, reward, stop, _ = self.game.step(a)
+            s = self._obs_to_idx(obs)
+
+        rewards.append(reward)
+
+    return rewards
+
+  def run_episode(self, al, e, g):
+    obs = self.game.start_game()
+    s = self._obs_to_idx(obs)
+    pi = self.get_policy()
+    if np.random.rand() > e:
+        a = pi[s]
+    else:
+        a = np.random.randint(self.a_num)
+
+    stop = False
+    while not stop:
+        pi = self.get_policy()
+        obs, reward, stop, _ = self.game.step(a)
+        s_new = self._obs_to_idx(obs)
+        
+        if np.random.rand() > e:
+            a_new = pi[s_new]
+        else:
+            a_new = np.random.randint(self.a_num)
+        
+        self.Q[s, a] = self.Q[s, a] + al * (reward + g * np.max(self.Q[s_new]) - self.Q[s, a])
+        s = s_new
+        a = a_new
+
+  def _obs_to_idx(self, obs):
+    return (obs[0] - 1) * self.max_dl_hand * 2  * self.deck_st + (obs[1] - 1) * 2 * self.deck_st + obs[2] * self.deck_st + obs[3]

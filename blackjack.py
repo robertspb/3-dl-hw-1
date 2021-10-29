@@ -1,4 +1,5 @@
 import gym
+import random
 from gym import spaces
 from gym.utils import seeding
 
@@ -179,3 +180,110 @@ class BlackjackDoubleEnv(BlackjackEnv):
                 # Natural gives extra points, but doesn't autowin. Legacy implementation
                 reward = 1.5
         return self._get_obs(), reward, done, {}
+
+
+class BlackjackCountEnv(BlackjackDoubleEnv):
+    def __init__(self, natural=False, sab=False):
+        self.action_space = spaces.Discrete(3)
+        self.observation_space = spaces.Tuple((spaces.Discrete(32), spaces.Discrete(11), spaces.Discrete(2), spaces.Discrete(21)))
+        self.seed()
+        self.natural = natural
+        self.sab = sab
+        self.dealer = []
+        self.player = []
+        self.start_new_deck()
+    
+    def step(self, action):
+        assert self.action_space.contains(action)
+        if action == 1:  # hit: add a card to players hand and return
+            self.player.append(self.draw_card())
+            if is_bust(self.player):
+                done = True
+                reward = -1.
+            else:
+                done = False
+                reward = 0.0
+        elif action == 2:  # double
+            done = True
+            self.player.append(self.draw_card())
+            if is_bust(self.player):
+                reward = -2.
+            else:
+                while sum_hand(self.dealer) < 17:
+                    self.dealer.append(self.draw_card(closed=True))
+                reward = 2.0 * cmp(score(self.player), score(self.dealer))
+            if (
+                not self.sab
+                and self.natural
+                and is_natural(self.player)
+                and reward == 2.0
+            ):
+                reward = 3.0
+        else:  # stick: play out the dealers hand, and score
+            done = True
+            while sum_hand(self.dealer) < 17:
+                self.dealer.append(self.draw_card(closed=True))
+            reward = cmp(score(self.player), score(self.dealer))
+            if self.sab and is_natural(self.player) and not is_natural(self.dealer):
+                # Player automatically wins. Rules consistent with S&B
+                reward = 1.0
+            elif (
+                not self.sab
+                and self.natural
+                and is_natural(self.player)
+                and reward == 1.0
+            ):
+                # Natural gives extra points, but doesn't autowin. Legacy implementation
+                reward = 1.5
+        if done:
+            for card in self.dealer[self.closed_cards_num:]:
+                self.deck_score += self.get_card_score(card)
+
+        return self._get_obs(), reward, done, {}
+
+    def start_game(self):
+        self.dealer = []
+        self.dealer.append(self.draw_card())
+        self.dealer.append(self.draw_card(closed=True))
+        self.closed_cards_num = 1
+        self.player = []
+        self.player.append(self.draw_card())
+        self.player.append(self.draw_card())
+        return self._get_obs()
+
+    def start_new_deck(self):
+        self.deck = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10] * 4
+        random.shuffle(self.deck)
+        self.deck_score = 0
+        self.old_dealer_cards_num = len(self.dealer)
+    
+    def draw_card(self, closed=False):
+        if len(self.deck) < 15:
+            self.start_new_deck()
+        card = self.deck.pop()
+        if not closed:
+            self.deck_score += self.get_card_score(card)
+        return card
+
+    def _get_obs(self):
+        return sum_hand(self.player), self.dealer[0], usable_ace(self.player), int(self.deck_score)
+
+    @staticmethod
+    def get_card_score(card):
+        # if card in [2, 7]:
+        #     return 0.5
+        # elif card in [3, 4, 6]:
+        #     return  1
+        # elif card == 5:
+        #     return 1.5
+        # elif card == 8:
+        #     return 0
+        # elif card == 0:
+        #     return -0.5
+        # elif card in [1, 10]:
+        #     return -1
+        if card in [2, 3, 4, 5, 6]:
+            return 1
+        elif card in [1, 10]:
+            return  -1
+        return 0
